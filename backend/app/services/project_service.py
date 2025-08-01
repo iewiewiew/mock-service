@@ -1,0 +1,77 @@
+# !/usr/bin/env python
+# -*- coding:utf-8 -*-
+
+"""
+@author       weimenghua
+@time         2025/10/1 19:12
+@description
+"""
+
+from ..core.database import db
+from ..models.mock_model import Mock
+from ..models.project_model import Project
+
+
+class ProjectService:
+    """项目服务层"""
+
+    def get_all_projects(self):
+        """获取所有项目"""
+        projects = Project.query.all()
+        return [{'id': p.id, 'name': p.name, 'description': p.description, 'mock_api_count': len(p.mock_apis),
+            'created_at': p.created_at.isoformat(), 'updated_at': p.updated_at.isoformat()} for p in projects]
+
+    def get_projects_by_pages(self, page, per_page, name):
+        """分页获取项目列表"""
+        query = Project.query
+        if name:
+            query = query.filter(Project.name.like(f'%{name}%'))
+
+        pagination = query.paginate(page=page, per_page=per_page)
+        return {'data': [p.to_dict() for p in pagination.items], 'total': pagination.total}
+
+    def get_project_by_id(self, project_id):
+        """根据 ID 获取项目"""
+        project = Project.query.get_or_404(project_id)
+        return project.to_dict()
+
+    def create_project(self, data):
+        """创建项目"""
+        # 检查项目名称是否已存在
+        if Project.query.filter_by(name=data['name']).first():
+            raise ValueError('Project name already exists')
+
+        project = Project(name=data['name'], description=data.get('description', ''))
+        db.session.add(project)
+        db.session.commit()
+
+        return project.to_dict()
+
+    def update_project(self, project_id, data):
+        """更新项目"""
+        project = Project.query.get_or_404(project_id)
+
+        # 检查项目名称是否与其他项目冲突
+        if 'name' in data and data['name'] != project.name:
+            if Project.query.filter(Project.name == data['name'], Project.id != project_id).first():
+                raise ValueError('Project name already exists')
+            project.name = data['name']
+
+        if 'description' in data:
+            project.description = data['description']
+
+        db.session.commit()
+        return project.to_dict()
+
+    def delete_project(self, project_id):
+        """删除项目"""
+        project = Project.query.get_or_404(project_id)
+        db.session.delete(project)
+        db.session.commit()
+
+    def get_project_mock_apis(self, project_id):
+        """获取项目的 Mock API 列表"""
+        # 验证项目是否存在
+        Project.query.get_or_404(project_id)
+        mock_apis = Mock.query.filter_by(project_id=project_id).all()
+        return [api.to_dict() for api in mock_apis]
